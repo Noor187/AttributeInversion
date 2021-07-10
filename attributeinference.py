@@ -118,15 +118,21 @@ def getEmbeddings(model, path):
 
 if __name__ == "__main__":
 
-    targetModel=True
-    isTargetData=True
-    # for training target : targetModel= True and isTargetData=True  then call Train func
-    # for testing target : targetModel= True and isTargetData=True   then call Test func
-    # for gettingembedding : targetModel= True and isTargetData=True   then call getEmbeddings func
-    # for training attack : targetModel= False and isTargetData=False   then call Train func
-    # for testing attack : targetModel= False and isTargetData=False    then call Test func           
+    # for training target : isTargetModel= True and isTargetData=True  then call Train func
+    # for testing target : isTargetModel= True and isTargetData=True   then call Test func
+    # for gettingembedding : isTargetModel= True and isTargetData=True   then call getEmbeddings func
+    # for training attack : isTargetModel= False and isTargetData=False   then call Train func
+    # for testing attack : isTargetModel= False and isTargetData=False    then call Test func  
 
-    if targetModel:
+    # funcName=sys.argv[0]
+    # isTargetModel=sys.argv[1]
+    # isTargetData=sys.argv[2]
+
+    isTargetModel=True
+    isTargetData=True
+         
+
+    if isTargetModel:
         model = TargetNeuralNetwork().to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0.0001)
         loss_fn = nn.MSELoss()
@@ -141,8 +147,8 @@ if __name__ == "__main__":
 
 
     Train(isTargetData, model, loss_fn, optimizer, 2, path=global_path+weightsPath)
-
+    
     # Test(isTargetData, model, path=global_path+weightsPath)
 
-    # getEmbeddings(path=global_path+weightsPath)
+    # getEmbeddings(model,path=global_path+weightsPath)
 

@@ -16,25 +16,25 @@ class TargetNeuralNetwork(nn.Module):
         self.fc2 = nn.Linear(128, 1)
 
     def forward(self, x):
-        print(x.size())
+        #print(x.size())
         x = F.relu(self.conv_1(x))
-        print(x.size())
+        #print(x.size())
         x = self.maxpool_1(x)
-        print(x.size())
+        #print(x.size())
         x = F.relu(self.conv_2(x))
-        print(x.size())
+        #print(x.size())
         x = self.maxpool_2(x)
-        print(x.size())
+        #print(x.size())
         x = F.relu(self.conv_3(x))
-        print(x.size())
+        #print(x.size())
         x = self.maxpool_3(x)
-        print(x.size())
+        #print(x.size())
         x = x.view(-1, 320000)
-        print(x.size())
+        #print(x.size())
         x = F.relu(self.fc1(x))
-        print(x.size())
+        #print(x.size())
         x_ = self.fc2(x)
-        print(x_.size())
+        #print(x_.size())
         return x_,x
 
 
@@ -47,11 +47,11 @@ class AttackNeuralNetwork(nn.Module):
         self.fc3 = nn.Linear(128, 2)
 
     def forward(self, x):
-        print(x.size())
+        #print(x.size())
         x = F.relu(self.fc1(x))
-        print(x.size())
+        #print(x.size())
         x = F.relu(self.fc2(x))
-        print(x.size())        
+        #print(x.size())        
         x = self.fc3(x)
-        print(x.size())
+        #print(x.size())
         return x
