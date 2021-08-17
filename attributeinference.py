@@ -146,7 +146,7 @@ if __name__ == "__main__":
         weightsPath="/model_weights/attack_net.pth"
 
 
-    Train(isTargetData, model, loss_fn, optimizer, 2, path=global_path+weightsPath)
+    Train(isTargetData, model, loss_fn, optimizer, 200, path=global_path+weightsPath)
     
     # Test(isTargetData, model, path=global_path+weightsPath)
 
