@@ -7,48 +7,58 @@ Original file is located at
     https://colab.research.google.com/drive/1aDytnYLrOf0M2uUjlSNuIJ1iDwUolK3G
 """
 
-# from google.colab import drive
-# drive.mount('/content/drive')
+# import torch
+
+# # imports the torch_xla package
+# import torch_xla
+# import torch_xla.core.xla_model as xm
+# device = xm.xla_device()
+
 import torch
 import os
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from attributeDataset import AttributeDataset
-from network import NeuralNetwork
+from network import TargetNeuralNetwork, AttackNeuralNetwork
+from torchvision import transforms
+import numpy
+device = "cuda"
+# global_path="D:/[Saarland]/[Semester1]/[PET]/[petProject]/AttributeInference"
+global_path="drive/MyDrive/pet/AttributeInversion/"
 
-device = "cpu"
-global_path="D:/[Saarland]/[Semester1]/[PET]/[petProject]/AttributeInference/Project"
-# global_path="drive/MyDrive/pet/AttributeInversion"
+# global_path=""
 
-def get_data_loaders(batch_size_train, batch_size_test):
-    # train_set = AttributeDataset(global_path+"/data/faces/training/")
-    # transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    # ])
-    train_set = AttributeDataset(global_path+"/data/UTKFace/Target/Train/")
-    # train_set, val_set = torch.utils.data.random_split(dataset, [50000, 10000])
+def get_data_loaders(batch_size,datasetPath,isEmbed,isAge):
 
-    train_load = DataLoader(
-        dataset=train_set, batch_size=batch_size_train,  # shuffle=True,
+    dataSet = AttributeDataset(datasetPath,isEmbed=isEmbed,isAge=isAge)
+    dataLoad = DataLoader(
+        dataset=dataSet, batch_size=batch_size,shuffle=True,
         num_workers=8, pin_memory=True)
-    test_set = AttributeDataset(global_path+"/data/UTKFace/Target/Test/")
-    test_load = DataLoader(
-        dataset=test_set, batch_size=batch_size_test,  # shuffle=True,
-        num_workers=8, pin_memory=True)
-    return train_load, test_load
+    
+    return dataLoad
 
+def Train(isTrainTarget, model, loss_fn, optimizer, epochs, path):
+    if isTrainTarget:                                                #if we have to train the target model
+        datasetPath=global_path+"data/UTKFace/Target/Train"
+        dataset_loader= get_data_loaders(128,datasetPath,False,True)
 
-def train(dataloader, model, loss_fn, optimizer, epochs, path=global_path+"/model_weights/model_inversion.pth",
-          train_shallow=False):
-    size = len(dataloader.dataset)
+    else:
+        datasetPath=global_path+"data/UTKFace/Attack/Train"          #if we have to train the attack model
+        dataset_loader= get_data_loaders(128,datasetPath,True,False)
+
+    size = len(dataset_loader.dataset)
     model.train()
     for epoch in range(epochs):
-        for batch, (X, y) in enumerate(dataloader):
+        for batch, (X, y) in enumerate(dataset_loader):
             # Compute prediction and loss
             X= X.to(device)
             y= y.to(device)
-            
+            # print(X)
+            # print(y)
             pred,embed = model(X.float())
+            pred= torch.squeeze(pred,1)
+            y=y.type(torch.cuda.FloatTensor)
             loss = loss_fn(pred, y)
 
             # Backpropagation
@@ -58,40 +68,94 @@ def train(dataloader, model, loss_fn, optimizer, epochs, path=global_path+"/mode
 
             if batch % 1 == 0:
                 loss, current = loss.item(), batch * len(X)
-                print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                print(f"loss: {loss:>7f}  [{current:>5}/{size:>5d}]")
+                print(epoch)
 
     print("training finished")
     torch.save(model.state_dict(), path)
 
+def Test(isTestTarget, model, path):
 
-def test(dataloader, model, path=global_path+"/model_weights/mnist_net.pth", shallow=False):
+    if isTestTarget:                                         #if we have to test the target model
+        datasetPath=global_path+"/data/UTKFace/Target/Test"
+        dataset_loader= get_data_loaders(128,datasetPath,False,True)
+    else:                                                    #if we have to test the attack model
+        datasetPath=global_path+"/data/UTKFace/Attack/Test"
+        dataset_loader= get_data_loaders(128,datasetPath,True,False)
+
     model.load_state_dict(torch.load(path))
     correct = 0
     total = 0
     model.eval()
     with torch.no_grad():
-        for data in dataloader:
+        for data in dataset_loader:
             images, labels = data
             images, labels = images.to(device), labels.to(device)
             outputs,embed = model(images.float())
-            if shallow:
-                outputs = F.log_softmax(outputs)
-            _, predicted = torch.max(outputs.data, 1)
+            outputs= torch.squeeze(outputs,1)
             total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    print("Accuracy : ", 100 * correct / total)
+            # print('outputs '+ str(outputs))
+            # print('true labels. '+str(labels))
+            correct += torch.sum((outputs-labels)**2).item()
+    print("squared distance : ", correct**0.5 / total)
+
+def getEmbeddings(model, path):
+    datasetPath=global_path+"/data/UTKFace/Attack/Train"
+    dataset_loader= get_data_loaders(128,datasetPath,False,False)
+    model.load_state_dict(torch.load(path))
+    i=0
+    with torch.no_grad():
+        for data in dataset_loader:
+            images, labels = data
+            images, labels = images.to(device), labels.to(device)
+            outputs,embed = model(images.float())
+            labels=torch.unsqueeze(labels,1)
+            # print("embed"+str(embed.size()))
+            # print("embed"+str(labels.size()))
+            embed=torch.cat((embed, labels), 1)
+            if i==0:
+              embeddings=embed
+              label=labels
+            else:
+              embeddings=torch.cat((embeddings, embed), 0)
+              label=torch.cat((label, labels), 0)
+            i=1
+    # numpy.save(embeddings.numpy(),datasetPath+'Embed/dataset.npy')
+    torch.save(embeddings, datasetPath+'Embed/features.pt')
+    # torch.save(label, datasetPath+'Embed/labels.pt')
 
 if __name__ == "__main__":
-    if not os.path.exists(global_path+"/model_weights"):
-        os.mkdir(global_path+"/model_weights")
-    num_classes=117
-    train_loader, test_loader = get_data_loaders(128, 128)
-    loss_fn = nn.CrossEntropyLoss()
-    model = NeuralNetwork(num_classes,isTarget=True).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0.0001)
-    # model.load_state_dict(torch.load(global_path+'/model_weights/face_net.pth')
-    # model.load_state_dict(torch.load(global_path+'/model_weights/face_net.pth',map_location=torch.device('cpu')))
-    train(train_loader, model, loss_fn, optimizer, 200,
-          path=global_path+"/model_weights/target_net.pth")
-    test(test_loader, model, path=global_path+"/model_weights/target_net.pth")
+
+    # for training target : isTargetModel= True and isTargetData=True  then call Train func
+    # for testing target : isTargetModel= True and isTargetData=True   then call Test func
+    # for gettingembedding : isTargetModel= True and isTargetData=True   then call getEmbeddings func
+    # for training attack : isTargetModel= False and isTargetData=False   then call Train func
+    # for testing attack : isTargetModel= False and isTargetData=False    then call Test func  
+
+    # funcName=sys.argv[0]
+    # isTargetModel=sys.argv[1]
+    # isTargetData=sys.argv[2]
+
+    isTargetModel=True
+    isTargetData=True
+         
+
+    if isTargetModel:
+        model = TargetNeuralNetwork().to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0.0001)
+        loss_fn = nn.MSELoss()
+        weightsPath="/model_weights/target_net.pth"
+
+    else:
+        model = AttackNeuralNetwork().to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0.0001)
+        loss_fn = nn.CrossEntropyLoss()
+        weightsPath="/model_weights/attack_net.pth"
+
+
+    Train(isTargetData, model, loss_fn, optimizer, 200, path=global_path+weightsPath)
+    
+    # Test(isTargetData, model, path=global_path+weightsPath)
+
+    # getEmbeddings(model,path=global_path+weightsPath)
 
