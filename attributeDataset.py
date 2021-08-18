@@ -5,6 +5,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 
+
 class AttributeDataset(Dataset):
 
     def __init__(self, root, transform=None, isEmbed=True,isAge=True):
@@ -26,29 +27,37 @@ class AttributeDataset(Dataset):
           for img in images:
               self.training_files_names.append(os.path.join(root,img))
         else:
-          dataset=torch.load(root+"/dataset.pt")
-          
-
+          # self.dataset=torch.load(root+"/dataset.pt")
+          self.dataset=torch.load(root+"Embed/features.pt")
+          # self.datasetlabels=torch.load(root+"Embed/labels.pt")
+          self.dataset=self.dataset.detach().cpu().numpy()
+          # self.datasetlabels=self.datasetlabels.detach().cpu().numpy()
 
     def __len__(self):
-        return len(self.training_files_names)
+        
+        if self.isEmbed:
+          return len(self.dataset)
+        else:
+          return len(self.training_files_names)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
         if self.isEmbed:
-          features=np.array(dataset)
-          features=features[idx,:-1]
+          features=self.dataset[idx,:-1]
+          label=int(self.dataset[idx,-1])
+          # print("features"+str(features))
+          # print("label"+str(label))
 
         else:
           features = np.asarray(Image.open(self.training_files_names[idx])) / 255.0
           features = np.transpose(features.astype(np.double))
 
-        if self.isAge:
-          label = float(self.training_files_names[idx].split("/")[-1][:].split("_")[0]) #age
-        else:
-          label = int(self.training_files_names[idx].split("/")[-1][:].split("_")[1]) #gender
+          if self.isAge:
+            label = float(self.training_files_names[idx].split("/")[-1][:].split("_")[0]) #age
+          else:
+            label = int(self.training_files_names[idx].split("/")[-1][:].split("_")[1]) #gender
 
         return features, label
 
